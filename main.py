@@ -9,11 +9,17 @@ import config
 
 def load_config() -> dict | None:
     load_dotenv(config.ENV_FILE, override=True)
-    token = os.getenv("GITHUB_TOKEN", "").strip()
-    player1 = os.getenv("PLAYER1_USERNAME", "").strip()
-    player2 = os.getenv("PLAYER2_USERNAME", "").strip()
+    token    = os.getenv("GITHUB_TOKEN", "").strip()
+    player1  = os.getenv("PLAYER1_USERNAME", "").strip()
+    player2  = os.getenv("PLAYER2_USERNAME", "").strip()
+    p2_token = os.getenv("PLAYER2_TOKEN", "").strip()   # optional
     if token and player1 and player2:
-        return {"token": token, "player1": player1, "player2": player2}
+        return {
+            "token": token,
+            "player1": player1,
+            "player2": player2,
+            "player2_token": p2_token or token,  # fall back to p1 token if not set
+        }
     return None
 
 

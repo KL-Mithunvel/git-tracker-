@@ -8,7 +8,7 @@ from api.github_client import GitHubClient
 from db.database import Database
 from engine.metrics import calculate_score, competition_days_elapsed
 from gui.player_card import PlayerCard
-from gui.charts import CommitChart
+from gui.charts import CommitChart, CumulativeChart
 
 _C = config.COLORS
 
@@ -18,13 +18,15 @@ class App(ctk.CTk):
         super().__init__()
         self.cfg = cfg
         self.db = Database()
-        self.client = GitHubClient(cfg["token"])
         self.p1 = cfg["player1"]
         self.p2 = cfg["player2"]
+        # Each player fetches with their own token so private repos are counted.
+        self.client_p1 = GitHubClient(cfg["token"])
+        self.client_p2 = GitHubClient(cfg.get("player2_token") or cfg["token"])
 
         self.title("Git Battle ⚔")
-        self.geometry("1300x800")
-        self.minsize(1100, 720)
+        self.geometry("1300x860")
+        self.minsize(1100, 780)
         self.configure(fg_color=_C["bg"])
 
         self._build_ui()
@@ -116,14 +118,29 @@ class App(ctk.CTk):
         self.p2_card.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
 
     def _build_chart_section(self):
-        outer = ctk.CTkFrame(
-            self, fg_color=_C["surface"], corner_radius=12, height=220,
+        tabs = ctk.CTkTabview(
+            self,
+            height=300,
+            fg_color=_C["surface"],
+            segmented_button_fg_color=_C["bg"],
+            segmented_button_selected_color=_C["p1_accent"],
+            segmented_button_selected_hover_color=_C["p1_accent"],
+            segmented_button_unselected_color=_C["surface"],
+            segmented_button_unselected_hover_color=_C["border"],
+            text_color=_C["text_primary"],
+            corner_radius=12,
         )
-        outer.pack(fill="x", padx=18, pady=(0, 8))
-        outer.pack_propagate(False)
+        tabs.pack(fill="x", padx=18, pady=(0, 8))
 
-        self.chart = CommitChart(outer)
+        t1 = tabs.add("Daily Commits")
+        t2 = tabs.add("Cumulative")
+        tabs.set("Daily Commits")
+
+        self.chart = CommitChart(t1)
         self.chart.pack(fill="both", expand=True)
+
+        self.cumulative_chart = CumulativeChart(t2)
+        self.cumulative_chart.pack(fill="both", expand=True)
 
     def _build_statusbar(self):
         bar = ctk.CTkFrame(self, fg_color="transparent", height=26)
@@ -161,10 +178,10 @@ class App(ctk.CTk):
     def _fetch_and_update(self):
         since = config.COMPETITION_START_DATE
         try:
-            p1_stats = self.client.fetch_user_stats(self.p1, since)
+            p1_stats = self.client_p1.fetch_user_stats(self.p1, since)
             self.db.save_stats(p1_stats)
 
-            p2_stats = self.client.fetch_user_stats(self.p2, since)
+            p2_stats = self.client_p2.fetch_user_stats(self.p2, since)
             self.db.save_stats(p2_stats)
 
             self.db.log_sync("ok")
@@ -211,11 +228,22 @@ class App(ctk.CTk):
             )
 
         self.chart.update(p1_stats, p2_stats, self.p1, self.p2)
+        self.cumulative_chart.update(p1_stats, p2_stats, self.p1, self.p2)
 
         now = datetime.now().strftime("%I:%M %p")
-        suffix = " (cached)" if from_cache else ""
-        err_suffix = f"  ·  Error: {error[:60]}" if error else ""
-        self.sync_label.configure(text=f"Last synced: {now}{suffix}{err_suffix}")
+        if error:
+            self.sync_label.configure(
+                text=f"Sync failed — {error[:90]}",
+                text_color=_C["danger"],
+                font=ctk.CTkFont(size=12, weight="bold"),
+            )
+        else:
+            suffix = " (cached)" if from_cache else ""
+            self.sync_label.configure(
+                text=f"Last synced: {now}{suffix}",
+                text_color=_C["text_secondary"],
+                font=ctk.CTkFont(size=11),
+            )
 
         # Schedule next auto-refresh
         self._schedule_next(config.REFRESH_INTERVAL_SECONDS)

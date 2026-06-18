@@ -81,7 +81,7 @@ class SetupWizard(ctk.CTkToplevel):
             "",
             "MithunvelKL",
         )
-        self.p1_var.set("MithunvelKL")
+        self.p1_var.set("KL-Mithunvel")
 
         self.p2_var = field(
             card,
