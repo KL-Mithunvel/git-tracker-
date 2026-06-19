@@ -15,11 +15,11 @@ COLORS = {
 
 SCORE_WEIGHTS = {
     "commit": 10,
-    "pr_opened": 10,
-    "pr_merged": 25,
-    "issue_created": 3,
-    "code_review": 8,
-    "repo_created": 15,
+    "pr_opened": 0,
+    "pr_merged": 0,
+    "issue_created": 0,
+    "code_review": 0,
+    "repo_created": 0,
 }
 
 REFRESH_INTERVAL_SECONDS = 300

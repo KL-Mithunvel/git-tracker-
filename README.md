@@ -10,12 +10,12 @@ A local desktop scoreboard for tracking head-to-head GitHub activity between two
 
 | Metric | Points | Notes |
 |--------|--------|-------|
-| Commits | 10 pts each | Primary — shown as the hero number |
-| PR merged | 25 pts | |
-| PR opened | 10 pts | |
-| Issues created | 3 pts | |
-| Code reviews | 8 pts | |
-| Repos created | 15 pts | |
+| Commits | 10 pts each | Only metric that counts toward score |
+| PR merged | — | Display only |
+| PR opened | — | Display only |
+| Issues created | — | Display only |
+| Code reviews | — | Display only |
+| Repos created | — | Display only |
 | Streak | — | Consecutive days with ≥1 commit |
 | Today / Peak day | — | Display only |
 
