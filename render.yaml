@@ -1,0 +1,12 @@
+# Render blueprint — lets you deploy by pointing Render at this repo.
+# Env vars (GITHUB_TOKEN, PLAYER1_USERNAME, PLAYER2_USERNAME, PLAYER2_TOKEN)
+# are intentionally NOT listed here — set them as secrets in the Render
+# dashboard so they never get committed to git.
+services:
+  - type: web
+    name: git-battle-web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r web/requirements.txt
+    startCommand: gunicorn web.app:app
+    healthCheckPath: /healthz

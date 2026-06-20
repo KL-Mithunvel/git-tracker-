@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚔ Git Battle</title>
+
+  <!-- Expose server-side colours + refresh interval to CSS/JS -->
+  <style>
+    :root {
+      --bg: {{ colors.bg }};
+      --surface: {{ colors.surface }};
+      --border: {{ colors.border }};
+      --text-primary: {{ colors.text_primary }};
+      --text-secondary: {{ colors.text_secondary }};
+      --p1: {{ colors.p1_accent }};
+      --p2: {{ colors.p2_accent }};
+      --leading: {{ colors.leading }};
+      --danger: {{ colors.danger }};
+    }
+  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚔&nbsp; GIT BATTLE</div>
+    <div id="day-label" class="day-label"></div>
+    <button id="refresh-btn" class="refresh-btn">↻&nbsp; Refresh</button>
+  </header>
+
+  <main class="board">
+    <!-- Player 1 -->
+    <section class="card" id="card-p1" style="--accent: var(--p1);">
+      <div class="card-top">
+        <img class="avatar" id="p1-avatar" alt="" />
+        <div class="name-col">
+          <div class="username" id="p1-username">Loading…</div>
+          <div class="crown" id="p1-crown"></div>
+        </div>
+      </div>
+      <div class="commit-box" id="p1-commitbox">
+        <div class="commit-label">COMMITS</div>
+        <div class="commit-value" id="p1-commits">—</div>
+        <div class="score" id="p1-score">0 pts</div>
+      </div>
+      <div class="divider"></div>
+      <div class="stats-grid" id="p1-stats"></div>
+    </section>
+
+    <!-- VS panel -->
+    <section class="vs">
+      <div class="vs-text">VS</div>
+      <div class="score-diff" id="score-diff"></div>
+      <div class="lead" id="lead-label"></div>
+    </section>
+
+    <!-- Player 2 -->
+    <section class="card" id="card-p2" style="--accent: var(--p2);">
+      <div class="card-top">
+        <img class="avatar" id="p2-avatar" alt="" />
+        <div class="name-col">
+          <div class="username" id="p2-username">Loading…</div>
+          <div class="crown" id="p2-crown"></div>
+        </div>
+      </div>
+      <div class="commit-box" id="p2-commitbox">
+        <div class="commit-label">COMMITS</div>
+        <div class="commit-value" id="p2-commits">—</div>
+        <div class="score" id="p2-score">0 pts</div>
+      </div>
+      <div class="divider"></div>
+      <div class="stats-grid" id="p2-stats"></div>
+    </section>
+  </main>
+
+  <section class="charts">
+    <div class="tabs">
+      <button class="tab active" data-tab="daily">Daily Commits</button>
+      <button class="tab" data-tab="cumulative">Cumulative</button>
+    </div>
+    <div class="chart-wrap" data-panel="daily"><canvas id="daily-chart"></canvas></div>
+    <div class="chart-wrap hidden" data-panel="cumulative"><canvas id="cumulative-chart"></canvas></div>
+  </section>
+
+  <footer class="statusbar">
+    <span id="sync-label">Fetching data…</span>
+    <span id="next-label"></span>
+  </footer>
+
+  <script>
+    window.REFRESH_SECONDS = {{ refresh_seconds }};
+  </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
