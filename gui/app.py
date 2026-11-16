@@ -6,7 +6,7 @@ import customtkinter as ctk
 import config
 from api.github_client import GitHubClient
 from db.database import Database
-from engine.metrics import calculate_score, competition_days_elapsed
+from engine.metrics import calculate_score, competition_days_elapsed, leadership_periods
 from gui.player_card import PlayerCard
 from gui.charts import CommitChart, CumulativeChart
 
@@ -25,8 +25,14 @@ class App(ctk.CTk):
         self.client_p2 = GitHubClient(cfg.get("player2_token") or cfg["token"])
 
         self.title("Git Battle ⚔")
-        self.geometry("1300x860")
-        self.minsize(1100, 780)
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w, h = int(sw * 0.85), int(sh * 0.85)
+        self.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
+        self.minsize(min(900, sw), min(600, sh))
+        try:
+            self.after(50, lambda: self.state("zoomed"))
+        except Exception:
+            pass
         self.configure(fg_color=_C["bg"])
 
         self._build_ui()
@@ -42,9 +48,11 @@ class App(ctk.CTk):
 
     def _build_ui(self):
         self._build_header()
+        # Status bar is packed at the bottom BEFORE the expanding chart area,
+        # so it is never squeezed out on short screens.
+        self._build_statusbar()
         self._build_main()
         self._build_chart_section()
-        self._build_statusbar()
 
     def _build_header(self):
         hdr = ctk.CTkFrame(self, fg_color=_C["surface"], height=58, corner_radius=0)
@@ -77,7 +85,7 @@ class App(ctk.CTk):
 
     def _build_main(self):
         main = ctk.CTkFrame(self, fg_color="transparent")
-        main.pack(fill="both", expand=True, padx=18, pady=(14, 6))
+        main.pack(fill="x", padx=18, pady=(10, 4))
         main.columnconfigure(0, weight=5)
         main.columnconfigure(1, weight=2)
         main.columnconfigure(2, weight=5)
@@ -90,7 +98,7 @@ class App(ctk.CTk):
         vs = ctk.CTkFrame(main, fg_color="transparent")
         vs.grid(row=0, column=1, sticky="nsew", padx=6)
 
-        ctk.CTkFrame(vs, fg_color="transparent").pack(expand=True, fill="both")
+        ctk.CTkFrame(vs, fg_color="transparent", height=1).pack(expand=True, fill="both")  # height=1: CTkFrame defaults to 200px
 
         ctk.CTkLabel(
             vs, text="VS",
@@ -112,7 +120,7 @@ class App(ctk.CTk):
         )
         self.lead_label.pack()
 
-        ctk.CTkFrame(vs, fg_color="transparent").pack(expand=True, fill="both")
+        ctk.CTkFrame(vs, fg_color="transparent", height=1).pack(expand=True, fill="both")  # height=1: CTkFrame defaults to 200px
 
         self.p2_card = PlayerCard(main, player_num=2)
         self.p2_card.grid(row=0, column=2, sticky="nsew", padx=(6, 0))
@@ -120,7 +128,7 @@ class App(ctk.CTk):
     def _build_chart_section(self):
         tabs = ctk.CTkTabview(
             self,
-            height=300,
+            height=220,  # minimum request only; expand=True fills the rest
             fg_color=_C["surface"],
             segmented_button_fg_color=_C["bg"],
             segmented_button_selected_color=_C["p1_accent"],
@@ -130,11 +138,19 @@ class App(ctk.CTk):
             text_color=_C["text_primary"],
             corner_radius=12,
         )
-        tabs.pack(fill="x", padx=18, pady=(0, 8))
+        tabs.pack(fill="both", expand=True, padx=18, pady=(0, 8))
 
         t1 = tabs.add("Daily Commits")
         t2 = tabs.add("Cumulative")
+        t3 = tabs.add("Lead History")
         tabs.set("Daily Commits")
+
+        self.lead_box = ctk.CTkTextbox(
+            t3, fg_color=_C["bg"], text_color=_C["text_primary"],
+            font=ctk.CTkFont(family="Consolas", size=16),
+        )
+        self.lead_box.pack(fill="both", expand=True)
+        self.lead_box.configure(state="disabled")
 
         self.chart = CommitChart(t1)
         self.chart.pack(fill="both", expand=True)
@@ -144,7 +160,7 @@ class App(ctk.CTk):
 
     def _build_statusbar(self):
         bar = ctk.CTkFrame(self, fg_color="transparent", height=26)
-        bar.pack(fill="x", padx=18)
+        bar.pack(side="bottom", fill="x", padx=18)
         bar.pack_propagate(False)
 
         self.sync_label = ctk.CTkLabel(
@@ -230,6 +246,8 @@ class App(ctk.CTk):
         self.chart.update(p1_stats, p2_stats, self.p1, self.p2)
         self.cumulative_chart.update(p1_stats, p2_stats, self.p1, self.p2)
 
+        self._update_lead_history(p1_stats, p2_stats)
+
         now = datetime.now().strftime("%I:%M %p")
         if error:
             self.sync_label.configure(
@@ -247,6 +265,24 @@ class App(ctk.CTk):
 
         # Schedule next auto-refresh
         self._schedule_next(config.REFRESH_INTERVAL_SECONDS)
+
+    def _update_lead_history(self, p1_stats, p2_stats):
+        from gui.charts import _date_range
+        days = _date_range(config.COMPETITION_START_DATE)
+        pers = leadership_periods(
+            (p1_stats or {}).get("daily_commits", {}),
+            (p2_stats or {}).get("daily_commits", {}),
+            self.p1, self.p2, days,
+        )
+        lines = []
+        for p in reversed(pers):
+            who = p["leader"] or "TIE"
+            rng = p["start"] if p["start"] == p["end"] else f"{p['start']} -> {p['end']}"
+            lines.append(f"{rng:<26} {who:<16} {p['p1']} - {p['p2']} commits")
+        self.lead_box.configure(state="normal")
+        self.lead_box.delete("1.0", "end")
+        self.lead_box.insert("1.0", "\n".join(lines) or "No commits yet.")
+        self.lead_box.configure(state="disabled")
 
     def _schedule_next(self, seconds: int):
         self._cancel_countdown()
