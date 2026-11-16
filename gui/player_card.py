@@ -31,7 +31,7 @@ class PlayerCard(ctk.CTkFrame):
     def _build_ui(self):
         # --- Top row: avatar + username ---
         top = ctk.CTkFrame(self, fg_color="transparent")
-        top.pack(fill="x", padx=16, pady=(14, 6))
+        top.pack(fill="x", padx=16, pady=(10, 4))
 
         self.avatar_label = ctk.CTkLabel(
             top, text="👤", font=ctk.CTkFont(size=32), width=52, height=52,
@@ -69,7 +69,7 @@ class PlayerCard(ctk.CTkFrame):
 
         self.commits_label = ctk.CTkLabel(
             commit_box, text="—",
-            font=ctk.CTkFont(size=64, weight="bold"),
+            font=ctk.CTkFont(size=52, weight="bold"),
             text_color=self.accent,
         )
         self.commits_label.pack(pady=(0, 2))
@@ -89,8 +89,8 @@ class PlayerCard(ctk.CTkFrame):
         # --- Stats grid ---
         grid = ctk.CTkFrame(self, fg_color="transparent")
         grid.pack(fill="x", padx=14, pady=(0, 8))
-        grid.columnconfigure(0, weight=1)
-        grid.columnconfigure(1, weight=1)
+        for c in range(3):
+            grid.columnconfigure(c, weight=1)
 
         stat_defs = [
             ("prs",     "PRs",      "🔀"),
@@ -104,7 +104,7 @@ class PlayerCard(ctk.CTkFrame):
         self._stat_labels: dict[str, ctk.CTkLabel] = {}
 
         for idx, (key, label, icon) in enumerate(stat_defs):
-            row, col = divmod(idx, 2)
+            row, col = divmod(idx, 3)  # 3 columns -> 2 rows, shorter card
             cell = ctk.CTkFrame(grid, fg_color="transparent")
             cell.grid(row=row, column=col, sticky="ew", padx=4, pady=2)
 

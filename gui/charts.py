@@ -2,11 +2,12 @@ from datetime import date, timedelta
 
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import customtkinter as ctk
 
 import config
+from engine.metrics import leadership_periods
 
 _C = config.COLORS
 
@@ -18,39 +19,26 @@ class _BaseChart(ctk.CTkFrame):
         kwargs.setdefault("fg_color", _C["surface"])
         super().__init__(master, **kwargs)
 
-        self.fig, self.ax = plt.subplots(facecolor=_C["chart_bg"])
+        # Figure (not pyplot) so no global figure manager holds references.
+        # Constrained layout re-fits titles/labels/legend on every resize,
+        # so no manual tight_layout or resize handling is needed.
+        self.fig = Figure(facecolor=_C["chart_bg"], layout="constrained")
+        self.fig.get_layout_engine().set(w_pad=0.08, h_pad=0.08)
+        self.ax = self.fig.add_subplot()
         self.ax.set_facecolor(_C["chart_bg"])
-        self._last_args: tuple | None = None
 
+        # matplotlib binds its own <Configure> handler that resizes the figure
+        # AND its backing image (DPI-aware). Do NOT re-bind <Configure> here —
+        # replacing that handler leaves the image at its initial 640x480 and
+        # the chart renders cropped/off-centre.
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         widget = self.canvas.get_tk_widget()
-        # Dark background so no white flash when figure hasn't been sized yet.
-        widget.configure(bg=_C["chart_bg"])
+        # Dark background so no white flash; small requested size so the
+        # canvas never forces the window taller than the screen — pack's
+        # expand=True grows it to fill whatever space is available.
+        widget.configure(bg=_C["chart_bg"], width=300, height=150,
+                         highlightthickness=0)
         widget.pack(fill="both", expand=True, padx=0, pady=0)
-        widget.bind("<Configure>", self._on_resize)
-        self._resize_id = None
-
-    def _on_resize(self, event):
-        if self._resize_id:
-            self.after_cancel(self._resize_id)
-        w, h = event.width, event.height
-        self._resize_id = self.after(120, lambda: self._apply_resize(w, h))
-
-    def _apply_resize(self, w: int, h: int):
-        if w > 50 and h > 50:
-            self.fig.set_size_inches(w / self.fig.dpi, h / self.fig.dpi)
-            if self._last_args:
-                # Full redraw so labels/content fit the new dimensions.
-                self.update(*self._last_args)
-            else:
-                self.canvas.draw_idle()
-        self._resize_id = None
-
-    def _fit_to_widget(self):
-        w = self.canvas.get_tk_widget().winfo_width()
-        h = self.canvas.get_tk_widget().winfo_height()
-        if w > 50 and h > 50:
-            self.fig.set_size_inches(w / self.fig.dpi, h / self.fig.dpi)
 
 
 class CommitChart(_BaseChart):
@@ -63,8 +51,6 @@ class CommitChart(_BaseChart):
         p1_name: str,
         p2_name: str,
     ):
-        self._last_args = (p1_stats, p2_stats, p1_name, p2_name)
-        self._fit_to_widget()
         self.ax.clear()
         self.ax.set_facecolor(_C["chart_bg"])
 
@@ -88,8 +74,7 @@ class CommitChart(_BaseChart):
         )
 
         _style_axes(self.ax, [d[5:] for d in days], xs, "Commits per Day")
-        self.fig.tight_layout(pad=0.5)
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
 
 class CumulativeChart(_BaseChart):
@@ -102,8 +87,6 @@ class CumulativeChart(_BaseChart):
         p1_name: str,
         p2_name: str,
     ):
-        self._last_args = (p1_stats, p2_stats, p1_name, p2_name)
-        self._fit_to_widget()
         self.ax.clear()
         self.ax.set_facecolor(_C["chart_bg"])
 
@@ -117,11 +100,11 @@ class CumulativeChart(_BaseChart):
 
         self.ax.plot(
             xs, p1_cumul, color=_C["p1_accent"],
-            linewidth=2.5, marker="o", markersize=5, label=p1_name,
+            linewidth=3.5, marker="o", markersize=4, label=p1_name,
         )
         self.ax.plot(
             xs, p2_cumul, color=_C["p2_accent"],
-            linewidth=2.5, marker="o", markersize=5, label=p2_name,
+            linewidth=3.5, marker="o", markersize=4, label=p2_name,
         )
         self.ax.fill_between(
             xs, p1_cumul, p2_cumul,
@@ -134,9 +117,17 @@ class CumulativeChart(_BaseChart):
             alpha=0.12, color=_C["p2_accent"],
         )
 
-        _style_axes(self.ax, [d[5:] for d in days], xs, "Cumulative Commits", legend_loc="upper left")
-        self.fig.tight_layout(pad=0.5)
-        self.canvas.draw()
+        # Shade background by who led in each period.
+        idx = {d: i for i, d in enumerate(days)}
+        for per in leadership_periods(p1_daily, p2_daily, p1_name, p2_name, days):
+            if per["leader"] is None:
+                continue
+            col = _C["p1_accent"] if per["leader"] == p1_name else _C["p2_accent"]
+            self.ax.axvspan(idx[per["start"]] - 0.5, idx[per["end"]] + 0.5,
+                            color=col, alpha=0.07, linewidth=0)
+
+        _style_axes(self.ax, [d[5:] for d in days], xs, "Cumulative Commits (shaded = who led)", legend_loc="upper left")
+        self.canvas.draw_idle()
 
 
 # --- helpers ---
@@ -160,16 +151,19 @@ def _running_total(daily: dict, days: list) -> list:
 
 
 def _style_axes(ax, labels, xs, title, legend_loc="upper right"):
-    ax.set_xticks(xs)
-    ax.set_xticklabels(labels, color=_C["text_secondary"], fontsize=9)
-    ax.tick_params(axis="y", colors=_C["text_secondary"], labelsize=9)
+    # Thin out labels so long competitions stay readable.
+    step = max(1, -(-len(xs) // 14))
+    ax.set_xticks(xs[::step])
+    ax.margins(x=0.01)
+    ax.set_xticklabels(labels[::step], color=_C["text_secondary"], fontsize=12)
+    ax.tick_params(axis="y", colors=_C["text_secondary"], labelsize=12)
     ax.spines[:].set_visible(False)
-    ax.set_title(title, color=_C["text_primary"], fontsize=11, pad=6)
+    ax.set_title(title, color=_C["text_primary"], fontsize=15, pad=8)
     ax.grid(axis="y", color=_C["border"], linewidth=0.6, alpha=0.7)
     ax.legend(
         facecolor=_C["surface"],
         edgecolor=_C["border"],
         labelcolor=_C["text_primary"],
-        fontsize=9,
+        fontsize=12,
         loc=legend_loc,
     )
